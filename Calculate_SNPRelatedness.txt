@@ -1,0 +1,73 @@
+Calculate relatedness based on different SNP-sets using ngsrelate and pi-hat
+
+#######
+STEP 1: Extract exons from WGS vfc files
+#!/bin/bash
+
+# Array of folders
+folders=("exons_100" "exons_10" "exons_1")
+
+for folder in "${folders[@]}"; do
+	# Define the input and output directories
+	input_dir=""
+	output_dir=""
+	bed_file=""
+	
+	# Create output directory if it does not exist
+	mkdir -p "$output_dir"
+	
+	# Loop through each .vcf.gz file in the input directory
+	for file in "$input_dir"/*.vcf.gz; do
+		# Extract the ID from the filename (e.g., "04T" from "04T.phased.vcf.gz")
+		base_name=$(basename "$file" .phased.vcf.gz)
+		# Define the output filename based on the ID
+		output_file="${output_dir}/${base_name}.exons.vcf.gz"
+		# Run bedtools intersect, redirecting the output to the appropriate file
+		bedtools intersect -a <(zcat "$file") -b "$bed_file" -header | bgzip > "$output_file"
+		echo "Processed $file to $output_file"
+	done
+	
+	# Index all .vcf.gz files in the output directory
+	for file2 in "$output_dir"/*.vcf.gz; do
+		bcftools index "$file2"
+	done
+	
+	# Merge VCF files into one file per exon downsample level and index the merged file
+	merged_output="${output_dir}/${folder}_ALL.vcf.gz"
+	bcftools merge -Oz -o "$merged_output" "$output_dir"/*.vcf.gz
+	bcftools index "$merged_output"
+	echo "Merged files into $merged_output"
+done
+
+
+#######
+STEP 2: run ngsrelate
+#!/bin/bash
+
+# Array of folders
+folders=("exons_100" "exons_10" "exons_1" "all_snps")
+
+# Loop through each folder
+for folder in "${folders[@]}"; do
+	# create a list with sample names
+	bcftools query -l "./$folder/${folder}.vcf.gz" | sed 's/\.RG\.bam$//' > "./$folder/${folder}_sample_ids.txt"
+	# run ngsrelate
+	ngsRelate -c 1 -T GT -h "./$folder/${folder}.vcf.gz" \
+	-z "./$folder/${folder}_sample_ids.txt" -O "./${folder}_ngsrelate.res"
+done
+
+
+#######
+STEP 3: run plink's pi-hat
+#!/bin/bash
+
+# Array of folders
+folders=("exons_100" "exons_10" "exons_1" "all_snps")
+
+# Loop through each folder
+for folder in "${folders[@]}"; do
+	# create bed file (plink format)
+	plink --vcf "./$folder/${folder}.vcf.gz" --make-bed --out "./$folder/${folder}_ALL"
+	# run plink to calculate pi_hat
+	plink --bfile "./$folder/${folder}_ALL" --genome --out "./${folder}_pi_hat"
+done

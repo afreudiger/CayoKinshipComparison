@@ -1,0 +1,41 @@
+Extract the Exon positions from the Macaque Genome using bash:
+
+# 1. (If your FASTA is still gzipped) Decompress the genome
+gunzip Macaca_mulatta.Mmul_10.dna_sm.toplevel.fa.gz
+
+# 2. Extract only exon lines on chromosomes 1–20 into a GTF
+grep -w 'exon' Macaca_mulatta.Mmul_10.112.chr.gtf \
+  | grep -E '^(1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20)\t' \
+  > autosomal_exons.gtf
+
+# 3. Convert that GTF to a simple BED of chr, start, end
+awk '$3=="exon" { print $1 "\t" $4 "\t" $5 }' autosomal_exons.gtf \
+  > autosomal_exons.bed
+
+# 4. Check your BED
+head autosomal_exons.bed
+
+# 5. Pull the sequences out of the genome FASTA
+bedtools getfasta \
+  -fi Macaca_mulatta.Mmul_10.dna_sm.toplevel.fa \
+  -bed autosomal_exons.bed \
+  -fo autosomal_exons.fa \
+  -s
+
+
+
+Subset exons to 10% and 1% in R:
+# read in bed file
+library(data.table)
+
+exomes_all <- fread("autosomal_exons.bed", header = FALSE)
+colnames(exomes_all) <- c("chromosome", "start", "end")
+
+# set a random seed for reproducibility
+set.seed(123)
+
+# sample 10% of the rows
+exome_10 <- exomes_all[sample(.N, size = 0.1 * .N)]
+
+# Sample 1% of the rows
+exome_1 <- exomes_all[sample(.N, size = 0.01 * .N)]
