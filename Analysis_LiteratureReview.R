@@ -4,6 +4,8 @@
 #            Before you run any analysis, always create a unique subset of the data, only including variables
 #            you are interested in. Always include publication ID.
 
+# NOTE: This code only creates single-panel plots without labels. Merging single plots to multi-panel plots and adding labels was done using INKSCAPE.
+
 
 
 #####
@@ -829,6 +831,7 @@ for (i in 1:length(x_axis)) {
   }
 }
 dev.off()
+
 
 
 
