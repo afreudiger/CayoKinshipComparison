@@ -1,236 +1,61 @@
 # Compare the performance of different relatedness estimators
 
+# NOTE: This code only creates single-panel plots without labels. Merging single plots to multi-panel plots and adding labels was done using INKSCAPE.
+
+#####
+# comparison STR and SNP estimators
 rm(list = ls())
-
-# load function to create sorted dyads
-cs.dyad <- function(ind1, ind2){
-  dy = paste(ind1, ind2, sep = "_")   
-  dy = unlist(lapply(as.character(dy), function(x){paste(sort(unlist(strsplit(x, split = "_"))), collapse = "_")}))
-  return(dy)
-}
-
-# load ibd and ped relatedness
-all <- read.csv("IBD_PED_wo-maxGP99-het-sampleswap_2025-09-17.csv", 
-                header = T, sep = ",")
-str(all)
-
-# read in sequencing info of animal ID
-# this is needed because SNP and PMR relatedness use different ID-codes for animals than STR, IBD and PED
-seq_inf <- read.csv("IndividualsSequenced_2024-11-21.csv", 
-                    header = T, sep = ";")
-str(seq_inf)
-# only keep the two ID-codes
-seq_red <- seq_inf[,c("animal_id","id_ccg")]
-
-
-
-#####
-# load pi-hat data
-library(data.table) # fread
-library(stringr) # str_match
-filenames <- list.files("./RelatednessEstimation", 
-                        pattern = "*pi_hat*", full.names = TRUE)
-# read all files in and save them in a list
-pihat <- lapply(filenames, fread)
-# rename the list according to the titles of the files
-names(pihat) <- str_match(filenames, "RelatednessEstimation/*(.*?)_pi_hat.genome")[,2]
-
-
-# extract ID from file name
-library(stringr) # str_remove
-# remove extensions from id columns --> only id should remain
-for(i in names(pihat)){
-  pihat[[i]] <- data.frame(pihat[[i]])
-  for(j in 1:2){
-    # remove file extensions to extract ID
-    pihat[[i]][,paste0("IID",j)] <- str_remove(pihat[[i]][,paste0("IID",j)], pattern = ".RG.bam")
-    # change col names of seq_red to match pihat
-    colnames(seq_red) <- c(paste0("animal_id",j), paste0("IID",j))
-    # merge animal ID to pihat
-    pihat[[i]] <- merge(pihat[[i]], seq_red, by = paste0("IID",j), all.x = T, all.y = F)
-    for(y in 1:nrow(pihat[[i]])){
-      # if animal_id is NA
-      if(is.na(pihat[[i]][y,paste0("animal_id",j)])){
-        # replace with IID
-        pihat[[i]][y,paste0("animal_id",j)] <- pihat[[i]][y,paste0("IID",j)]
-      }
-    }
-  }
-  # check if it worked well
-  print(unique(c(pihat[[i]][,"IID1"], pihat[[i]][,"IID2"])))
-  # create dyad ID
-  pihat[[i]][,"dyad_sorted"] <- cs.dyad(ind1 = pihat[[i]][,"animal_id1"], ind2 = pihat[[i]][,"animal_id2"])
-  # change column name of PI_HAT
-  names(pihat[[i]])[names(pihat[[i]]) == "PI_HAT"] <- paste0("pihat_",i)
-  all <- merge(all, pihat[[i]][,c("dyad_sorted",paste0("pihat_",i))], by = "dyad_sorted", all.x = F, all.y = T)
-}
-str(all)
-
-
-
-#####
-# load ngsrelate data
-library(data.table) # fread
-library(stringr) # str_match
-filenames <- list.files("./RelatednessEstimation", 
-                        pattern = "*ngsrelate.res", full.names = TRUE)
-# read all files in and save them in a list
-ngsrel <- lapply(filenames, fread)
-# rename the list according to the titles of the files
-names(ngsrel) <- str_match(filenames, "RelatednessEstimation/*(.*?)_ngsrelate.res")[,2]
-
-# ngsrelate saves IDs as numbers --> translate into real IDs
-ids <- read.table("ngsrelate_sample_ids.txt", 
-                  header = F)
-colnames(ids) <- "IID"
-ids$a <- c(0:97)
-str(ids)
-
-# extract ID from file name
-library(stringr) # str_remove
-# remove extensions from id columns --> only id should remain
-for(i in names(ngsrel)){
-  ngsrel[[i]] <- data.frame(ngsrel[[i]])
-  for(j in 1:2){
-    # translate number into ID
-    if(j == 1){
-      colnames(ids) <- c(paste0("IID",j),"a")
-      ngsrel[[i]] <- merge(ngsrel[[i]], ids, by = "a", all.x = T, all.y = F)
-    } else if(j == 2){
-      colnames(ids) <- c(paste0("IID",j),"b")
-      ngsrel[[i]] <- merge(ngsrel[[i]], ids, by = "b", all.x = T, all.y = F)
-    }
-    # change col names of seq_red to match ngsrel
-    colnames(seq_red) <- c(paste0("animal_id",j), paste0("IID",j))
-    # merge animal ID to ngsrel
-    ngsrel[[i]] <- merge(ngsrel[[i]], seq_red, by = paste0("IID",j), all.x = T, all.y = F)
-    for(y in 1:nrow(ngsrel[[i]])){
-      # if animal_id is NA
-      if(is.na(ngsrel[[i]][y,paste0("animal_id",j)])){
-        # replace with IID
-        ngsrel[[i]][y,paste0("animal_id",j)] <- ngsrel[[i]][y,paste0("IID",j)]
-      }
-    }
-  }
-  # check if it worked well
-  print(unique(c(ngsrel[[i]][,"IID1"], ngsrel[[i]][,"IID2"])))
-  # create dyad ID
-  ngsrel[[i]][,"dyad_sorted"] <- cs.dyad(ind1 = ngsrel[[i]][,"animal_id1"], ind2 = ngsrel[[i]][,"animal_id2"])
-  # change column name of rab and 2of3_IBD
-  names(ngsrel[[i]])[names(ngsrel[[i]]) == "X2of3_IDB"] <- paste0("twothree_",i)
-  names(ngsrel[[i]])[names(ngsrel[[i]]) == "rab"] <- paste0("rab_",i)
-  all <- merge(all, ngsrel[[i]][,c("dyad_sorted",paste0("rab_",i),paste0("twothree_",i))], by = "dyad_sorted", all.x = F, all.y = T)
-}
-
-str(all)
-
-
-
-#####
-# load PMR data
-pmr <- read.table("pmr94.ds_r_peakPMRs.tsv", header = T, sep = "\t")
-str(pmr)
-
-# extract ID from file name
-library(stringr) # str_remove
-# remove extensions from id columns --> only id should remain
-for(i in c("iid1", "iid2")){
-  for(j in c(".RG.bam", ".bam", ".speedseq.mmul10.bam")){
-    pmr[,i] <- str_remove(pmr[,i], pattern = j)
-  }
-}
-# check if it worked
-unique(c(pmr$iid1, pmr$iid2))
-
-# add animal ID of individuals
-colnames(seq_red) <- c("animal_id1", "iid1")
-pmr <- merge(pmr, seq_red, by = "iid1", all.x = T, all.y = F)
-colnames(seq_red) <- c("animal_id2", "iid2")
-pmr <- merge(pmr, seq_red, by = "iid2", all.x = T, all.y = F)
-str(pmr)
-
-
-# some individuals have their real ID instead of ccg_id
-# currently NA in data frame
-# copy their iid to animal_id
-for(i in 1:nrow(pmr)){
-  if(is.na(pmr[i,"animal_id1"])){
-    pmr[i,"animal_id1"] <- pmr[i,"iid1"]
-  }
-  if(is.na(pmr[i,"animal_id2"])){
-    pmr[i,"animal_id2"] <- pmr[i,"iid2"]
-  }
-}
-str(pmr)
-
-
-# create dyad IDs
-pmr$dyad_sorted <- cs.dyad(ind1 = pmr[,"animal_id1"], ind2 = pmr[,"animal_id2"])
-str(pmr)
-
-# create separate columns for PMR based on different coverages
-for(i in unique(pmr$cov_ds)){
-  temp <- subset(pmr[,c("dyad_sorted","r")], pmr$cov_ds == i)
-  colnames(temp)[2] <- paste0("pmr_",i,"x")
-  all <- merge(all, temp, by = "dyad_sorted", all.x = T, all.y = T)
-}
-
-
-
-# write.table(all, "n98_IBD_PED_PIHAT_RAB_STR_PMR_2025-11-04.txt", row.names = F, quote = F)
-
-
-
-
-#####
-# comparison STR estimators
-rm(list = ls())
-all <- read.table("n98_IBD_PED_PIHAT_RAB_STR_PMR_2025-11-04.txt", 
-                  sep = " ", header = T)
+all <- read.table("n98_IBD_PED_PIHAT_RAB_STR_PMR_2026-02-04.txt", 
+                  sep = "\t", header = T)
 str(all)
 
 # plot accuracy and precision for STR-based relatedness
-str <- with(all, data.frame(dyad_sorted = dyad_sorted,
-                            ibd = prop_genome_shared_8cm,
-                            kinlabel_plot = kinlabel_plot))
+str_snp <- with(all, data.frame(dyad_sorted = dyad_sorted,
+                                ibd = prop_genome_shared_8cm,
+                                kinlabel_plot = kinlabel_plot))
 # extract relevant columns
-str <- merge(str, all[,c(1,52:58)], by = "dyad_sorted")
-str(str)
+str_snp <- merge(str_snp, all[,c("dyad_sorted","str41_trioml","str41_wang","str41_lynchli","str41_lynchrd",
+                                 "str41_ritland","str41_quellergt","str41_dyadml","pihat_filtered_vcf","rab_filtered_vcf",
+                                 "twothree_filtered_vcf")], by = "dyad_sorted")
+str(str_snp)
 # calculate difference between IBD and each estimator
-for(i in colnames(all[,c(52:58)])){
-  str[,paste0(i,"_ibd")] <- str[,i] - str[,"ibd"]
+for(i in colnames(all[,c("str41_trioml","str41_wang","str41_lynchli","str41_lynchrd",
+                         "str41_ritland","str41_quellergt","str41_dyadml","pihat_filtered_vcf","rab_filtered_vcf",
+                         "twothree_filtered_vcf")])){
+  str_snp[,paste0(i,"_ibd")] <- str_snp[,i] - str_snp[,"ibd"]
 }
-str(str)
+str(str_snp)
 # create data frame for plotting
-str_plot <- data.frame(dyad_sorted = str$dyad_sorted,
-                       str = str$str41_trioml_ibd,
-                       estimator = as.character("trioml"),
-                       x_axis = 1)
+str_snp_plot <- data.frame(dyad_sorted = str_snp$dyad_sorted,
+                           r = str_snp$str41_trioml_ibd,
+                           estimator = as.character("str41_trioml_ibd"))
 library(stringr) # str_match
 # loop through each estimator and add the data
-for(i in c("str41_wang_ibd","str41_lynchli_ibd","str41_lynchrd_ibd","str41_ritland_ibd","str41_quellergt_ibd","str41_dyadml_ibd")){
-  str_plot <- rbind(str_plot, data.frame(dyad_sorted = str$dyad_sorted,
-                                         str = str[,i],
-                                         estimator = as.character(str_match(i, "str41_*(.*?)_ibd")[,2]),
-                                         x_axis = 1))
+for(i in c("str41_wang_ibd","str41_lynchli_ibd","str41_lynchrd_ibd","str41_ritland_ibd","str41_quellergt_ibd",
+           "str41_dyadml_ibd","pihat_filtered_vcf_ibd","rab_filtered_vcf_ibd","twothree_filtered_vcf_ibd")){
+  str_snp_plot <- rbind(str_snp_plot, data.frame(dyad_sorted = str_snp$dyad_sorted,
+                                                 r = str_snp[,i],
+                                                 estimator = as.character(i)))
 }
 
-# order them in plot according to publication date
-str_plot$x_axis <- ifelse(str_plot$estimator == "quellergt",1,
-                          ifelse(str_plot$estimator == "lynchli",2,
-                                 ifelse(str_plot$estimator == "ritland",3,
-                                        ifelse(str_plot$estimator == "lynchrd",4,
-                                               ifelse(str_plot$estimator == "wang",5,
-                                                      ifelse(str_plot$estimator == "dyadml",6,7))))))
+# order str in plot according to publication date
+ax <- data.frame(estimator = c("str41_wang_ibd","str41_lynchli_ibd","str41_lynchrd_ibd","str41_ritland_ibd","str41_quellergt_ibd",
+                               "str41_dyadml_ibd","str41_trioml_ibd","pihat_filtered_vcf_ibd","rab_filtered_vcf_ibd","twothree_filtered_vcf_ibd"),
+                 x_axis = as.numeric(c(5,2,4,3,1,6,7,8,9,10)))
+
+str_snp_plot <- merge(str_snp_plot, ax, by = "estimator")
+
+
 
 # create colours for plotting
-vis_data <- data.frame(col = sapply(seq(0.8, 0.2, length.out = 7), function(g) rgb(red = 0, green = g, blue = 0)))
+vis_data <- data.frame(col = c(sapply(seq(0.8, 0.2, length.out = 7), function(g) rgb(red = 0, green = g, blue = 0)),
+                               "deepskyblue2","deepskyblue3","deepskyblue4"))
 # plot it
-pdf(paste0("Plot_IBD-STR_DiffEstimators_2025-11-04.pdf"), 
-    width = 8, height = 5, useDingbats=FALSE)
+pdf(paste0("Plot_IBD-STR-SNP_Estimators_2026-02-04.pdf"), 
+    width = 9.5, height = 5, useDingbats=FALSE)
 par(mar = c(5,6,1,1))
 # set up plot
-plot(str_plot$str ~ str_plot$x_axis, xlim = c(0.7,7.3), 
+plot(str_snp_plot$r ~ str_snp_plot$x_axis, xlim = c(0.7,10.3), 
      ylim = c(-0.6,0.4),
      type = "n", cex.axis = 1.4, xlab = "", 
      ylab = "", xaxt = "n", 
@@ -238,10 +63,11 @@ plot(str_plot$str ~ str_plot$x_axis, xlim = c(0.7,7.3),
 )
 # add horizontal line for reference
 abline(h = 0, lwd = 1, lty = 2, col = "black")
+abline(v = 7.5, lwd = 1, lty = 1, col = "black")
 
 # loop through each estimator
-for (i in c(1:7)) {
-  dat <- subset(str_plot, x_axis == i)$str
+for (i in c(1:10)) {
+  dat <- subset(str_snp_plot, x_axis == i)$r
   n <- length(dat)
   # Define whisker limits (like boxplot: Q1 - 1.5*IQR, Q3 + 1.5*IQR)
   q1 <- quantile(dat, 0.25, na.rm = TRUE)
@@ -287,140 +113,30 @@ for (i in c(1:7)) {
 }
 
 # Axes + labels
-axis(side = 1, at = c(1:7), label = c("quellergt","lynchli","ritland","lynchrd","wang","dyadml","trioml"), 
-     las = 1, cex.axis = 1.2)
+axis(1, at = 1:10, labels = FALSE)
+text(
+  x = 1:10,
+  y = par("usr")[3] - 0.07,  # same height for all
+  labels = c("quellergt","lynchli","ritland","lynchrd","wang",
+             "dyadml","trioml","pi-hat",expression("r"["ab"]),"2-out-of-3"),
+  xpd = TRUE
+)
 axis(side = 2, c(-0.6,-0.4,-0.2,0,0.2,0.4), las = 2, cex.axis = 1.2)
-mtext(side = 1, text = "estimator", line = 3.5, cex = 1.7)
+mtext(side = 1, text = "estimator", line = 3, cex = 1.7)
 mtext(side = 2, text = expression("difference to r"["IBD"]), line = 3.5, cex = 1.7)
 
 dev.off()
 
 # compare the precision and accuracy for the two best performing estimators
-median(str$str41_dyadml_ibd); median(str$str41_trioml_ibd)
-range(str$str41_dyadml_ibd); range(str$str41_trioml_ibd)
+median(str_snp$str41_dyadml_ibd); median(str_snp$str41_trioml_ibd)
+range(str_snp$str41_dyadml_ibd); range(str_snp$str41_trioml_ibd)
 
 # compute the mean for each estimator
-for(i in c("quellergt","lynchli","ritland","lynchrd","wang","dyadml","trioml")){
-  print(paste(i, mean(subset(str_plot$str, str_plot$estimator == i)), sep = ": "))
+for(i in c("str41_wang_ibd","str41_lynchli_ibd","str41_lynchrd_ibd","str41_ritland_ibd","str41_quellergt_ibd",
+           "str41_dyadml_ibd","str41_trioml_ibd","pihat_filtered_vcf_ibd","rab_filtered_vcf_ibd","twothree_filtered_vcf_ibd")){
+  print(paste(i, mean(subset(str_snp_plot$r, str_snp_plot$estimator == i)), sep = ": "))
 }
-# --> DyadML it is
-
-# NOTE: To create Figure S3, this plot and the SNP plot were merged in INKSCAPE
-
-
-
-
-
-
-
-#####
-# comparison SNP estimators
-rm(list = ls())
-all <- read.table("n98_IBD_PED_PIHAT_RAB_STR_PMR_2025-11-04.txt", 
-                  sep = " ", header = T)
-str(all)
-
-
-# plot accuracy and precision for SNP-based relatedness
-snp <- with(all, data.frame(dyad_sorted = dyad_sorted,
-                            ibd = prop_genome_shared_8cm,
-                            kinlabel_plot = kinlabel_plot))
-# extract relevant information
-snp <- merge(snp, all[,c(1,34:51)], by = "dyad_sorted")
-
-# calculate difference between IBD and each estimator
-for(i in colnames(all[,c(34:51)])){
-  snp[,paste0(i,"_ibd")] <- snp[,i] - snp[,"ibd"]
-}
-str(snp)
-
-# set up data frame for plotting
-snp_plot <- with(snp, data.frame(dyad_sorted = dyad_sorted,
-                                 snp = pihat_filtered_vcf_ibd,
-                                 estimator = as.character("pihat"),
-                                 x_axis = 1))
-snp_plot <- rbind(snp_plot, with(snp, data.frame(dyad_sorted = dyad_sorted,
-                                                 snp = twothree_filtered_vcf_ibd,
-                                                 estimator = as.character("twothree"),
-                                                 x_axis = 2)))
-snp_plot <- rbind(snp_plot, with(snp, data.frame(dyad_sorted = dyad_sorted,
-                                                 snp = rab_filtered_vcf_ibd,
-                                                 estimator = as.character("rab"),
-                                                 x_axis = 3)))
-
-# choose colours for plotting
-vis_data <- data.frame(col = c("deepskyblue2","deepskyblue3","deepskyblue4"))
-# plot it
-pdf(paste0("Plot_IBD-SNP_DiffEstimators_2025-10-14.pdf"), 
-    width = 4, height = 5) #width = 7, height = 7
-par(mar = c(5,6,1,1))
-# set up plot
-plot(snp_plot$snp ~ snp_plot$x_axis, xlim = c(0.7,3.3), 
-     ylim = c(-0.6,0.4),
-     type = "n", cex.axis = 1.4, xlab = "", 
-     ylab = "", xaxt = "n", 
-     yaxt = "n"
-)
-# horizontal line for reference
-abline(h = 0, lwd = 1, lty = 2, col = "black")
-# loop through each estimator
-for (i in c(1:3)) {
-  dat <- subset(snp_plot, x_axis == i)$snp
-  n <- length(dat)
-  # Define whisker limits (like boxplot: Q1 - 1.5*IQR, Q3 + 1.5*IQR)
-  q1 <- quantile(dat, 0.25, na.rm = TRUE)
-  q3 <- quantile(dat, 0.75, na.rm = TRUE)
-  iqr <- q3 - q1
-  lower <- max(min(dat), q1 - 1.5 * iqr)
-  upper <- min(max(dat), q3 + 1.5 * iqr)
-  
-  # Density only within whiskers
-  d <- density(dat)
-  keep <- d$x >= lower & d$x <= upper
-  d$x <- d$x[keep]
-  d$y <- d$y[keep]
-  
-  # Scale density width
-  d$y <- d$y / max(d$y) * 0.3
-  
-  x_pos <- i
-  
-  # Draw violin (trimmed to whisker range)
-  polygon(c(x_pos - d$y, rev(x_pos + d$y)),
-          c(d$x, rev(d$x)),
-          col = adjustcolor(vis_data[i, "col"], alpha.f = 0.5),
-          border = vis_data[i, "col"])
-  
-  # Median line
-  med <- median(dat, na.rm = TRUE)
-  # find density value that's closest to position of median
-  y_med <- d$y[which.min(abs(d$x - med))]
-  # draw line as wide as violin is at this position
-  # adjust by 0.007 to make sure if aligns well with the violin
-  lines(c(x_pos - y_med + 0.007, x_pos + y_med - 0.007),
-        c(med, med),
-        col = vis_data[i, "col"], lwd = 2)
-  
-  # Plot outliers as points
-  outliers <- dat[dat < lower | dat > upper]
-  if (length(outliers) > 0) {
-    x_jitter <- x_pos + runif(length(outliers), -0.02, 0.02)  # fixed jitter range
-    points(x_jitter, outliers,
-           pch = 16, col = adjustcolor(vis_data[i, "col"], alpha.f = 0.7), cex = 0.5)
-  }
-}
-
-# Axes + labels
-axis(side = 1, at = c(1,2,3), label = c("pi-hat",expression("r"["ab"]),"2-out-of-3"), 
-     las = 1, cex.axis = 1.2)
-axis(side = 2, c(-0.6,-0.4,-0.2,0,0.2,0.4), las = 2, cex.axis = 1.2)
-mtext(side = 1, text = "estimator", line = 3.5, cex = 1.7)
-mtext(side = 2, text = expression("difference to r"["IBD"]), line = 3.5, cex = 1.7)
-
-dev.off()
-
-
-# NOTE: To create Figure S3, this plot and the SNP plot were merged in INKSCAPE
+# --> DyadML & PIHAT it is
 
 
 
@@ -500,8 +216,9 @@ plot(all$pihat_filtered_vcf ~ all$prop_genome_shared_8cm, xlim = c(0,0.6),
 )
 # perfect correlation between STR and IBD for reference
 abline(a = 0, b = 1, lwd = 1, lty = 2, col = "black")
-# plot semi-transparent points
-points(all$pmr_1x ~ all$prop_genome_shared_8cm,
+# plot semi-transparent points (correct for background relatedness)
+all$ibd_adjusted <- (all$prop_genome_shared_8cm - mean(subset(all$prop_genome_shared_8cm, all$kinlabel_plot == "nonkin")))
+points(all$pmr_1x ~ all$ibd_adjusted,
        col = adjustcolor("#D59A0D", alpha = 0.4), pch = 19)
 # Axes + labels
 axis(side = 1, c(0,0.1,0.2,0.3,0.4,0.5,0.6), 
@@ -536,7 +253,12 @@ str(all_dataset)
 for(i in colnames(all_dataset[,c("str10_dyadml","str20_dyadml","str41_dyadml",
                                  "pihat_exons_1","pihat_exons_10","pihat_exons_100","pihat_filtered_vcf",
                                  "pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")])){
-  all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+  # correct PMR for background relatedness
+  if(i %in% c("pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")){
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - (all_dataset[,"ibd"] - mean(subset(all$prop_genome_shared_8cm, all$kinlabel_plot == "nonkin")))
+  } else {
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+  }
 }
 str(all_dataset)
 
@@ -698,7 +420,12 @@ str(all_dataset)
 for(i in colnames(all_dataset[,c("str10_dyadml","str20_dyadml","str41_dyadml",
                                  "pihat_exons_1","pihat_exons_10","pihat_exons_100","pihat_filtered_vcf",
                                  "pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")])){
-  all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+  # correct PMR for background relatedness
+  if(i %in% c("pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")){
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - (all_dataset[,"ibd"] - mean(subset(all$prop_genome_shared_8cm, all$kinlabel_plot == "nonkin")))
+  } else {
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+  }
 }
 str(all_dataset)
 # assign each kin class to a degree of relatedness
@@ -882,13 +609,22 @@ colnames(all)
 all_dataset <- with(all, data.frame(dyad_sorted = dyad_sorted,
                                     ibd = prop_genome_shared_8cm,
                                     kinlabel_plot = kinlabel_plot))
-all_dataset <- merge(all_dataset, all[,c(1,34:67)], by = "dyad_sorted")
+all_dataset <- merge(all_dataset, all[,c("dyad_sorted","str10_dyadml","str20_dyadml","str41_dyadml",
+                                         "pihat_exons_1","pihat_exons_10","pihat_exons_100","pihat_filtered_vcf",
+                                         "pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")], by = "dyad_sorted")
 str(all_dataset)
 
 
 # calculate difference between IBD and each estimator
-for(i in colnames(all_dataset[,c(4:37)])){
-  all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+for(i in colnames(all_dataset[,c("str10_dyadml","str20_dyadml","str41_dyadml",
+                                 "pihat_exons_1","pihat_exons_10","pihat_exons_100","pihat_filtered_vcf",
+                                 "pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")])){
+  # correct PMR for background relatedness
+  if(i %in% c("pmr_0.01x","pmr_0.05x","pmr_0.1x","pmr_1x")){
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - (all_dataset[,"ibd"] - mean(subset(all$prop_genome_shared_8cm, all$kinlabel_plot == "nonkin")))
+  } else {
+    all_dataset[,paste0(i,"_ibd")] <- all_dataset[,i] - all_dataset[,"ibd"]
+  }
 }
 str(all_dataset)
 
@@ -898,3 +634,4 @@ for(i in colnames(all_dataset[,c(38:71)])){
   print(summary(all_dataset[,i]))
   print("")
 }
+
