@@ -1,8 +1,8 @@
 # Analysis of literature review data
 
-# IMPORTANT: Some articles appear multiple times in data set because they used > 1 species or > 1 marker type.
+# IMPORTANT: Some articles appear multiple times in the dataset because they used > 1 species and/or > 1 marker type.
 #            Before you run any analysis, always create a unique subset of the data, only including variables
-#            you are interested in. Always include publication ID.
+#            you are interested in. Always include the publication ID.
 
 # NOTE: This code only creates single-panel plots without labels. Merging single plots to multi-panel plots and adding labels was done using INKSCAPE.
 
@@ -118,7 +118,7 @@ dev.off()
 
 
 
-# count publications per year normalised by the total number of publications per year
+# count publications per year, normalised by the total number of publications per year
 # read in total counts per year
 total <- read.csv("NumbPublications-Year.csv",
                   header = T, sep = ";")
@@ -179,7 +179,7 @@ method$seq_method <- factor(method$seq_method,
 # create count table for plotting
 count_table <- table(method$year, method$seq_method)
 percent_table <- prop.table(count_table, margin = 1) * 100
-# transpose percent table
+# transpose percent_table
 t_percent <- t(percent_table)
 # get dimensions
 n_methods <- nrow(t_percent)
@@ -199,7 +199,7 @@ plot(0, 0, type = "n",
 mtext(side = 1, text = "year", line = 2.5, cex = 1.2)
 mtext(side = 2, text = "percentage [%]", line = 2.5, cex = 1.2)
 axis(1, at = c(2000,2005,2010,2015,2020,2025))
-colors <- c("#330000","#7F3136","#B8AC80","#D2D2CE")
+colors <- c("#330000","#7F3136","#B8AC80","grey91")
 # draw the stacked bars
 bar_width <- 0.8
 for (i in 1:n_years) {
@@ -391,7 +391,7 @@ par(mar = c(4,1,1,1))
 bp <- barplot(
   journal$perc_pub,
   horiz = TRUE,
-  col ="#AC8D61",
+  col ="#B8AC80",
   border = NA,
   xlim = c(-0.5, 14.5),
   yaxt = "n"
@@ -408,6 +408,86 @@ text(
   adj = 0
 )
 box()
+mtext(side = 1, text = "fraction publications [%]", line = 2.5, cex = 1.2)
+dev.off()
+
+
+
+
+
+
+
+
+
+#####
+# Topics
+rm(list = ls())
+data <- read.csv("Data_LiteratureReview.csv",
+                 header = T, sep = ",", na.strings = c("NA",""))
+str(data)
+# create function to sort topic alphabetically
+tpc_sort <- function(topic){
+  topic = unlist(lapply(as.character(topic), function(x){paste(sort(unlist(strsplit(x, split = ", "))), collapse = ", ")}))
+  return(topic)
+}
+# sort topic alphabetically
+data$topic <- tpc_sort(data$topic)
+# create unique data set
+topic <- unique(data[,c("publication_id","topic_sorted")])
+# create data frame to save counts for each topic
+result <- data.frame(topic = c("Conservation","Demography","Fitness","Inbreeding","Mating & Reproduction","Methods/Resource Development",
+                               "Miscellaneous","Population Genetics","Population Management","Social Behaviour"))
+rownames(result) <- result$topic
+
+# loop through each topic
+for(i in result$topic){
+  # loop through each row of the data frame
+  for(j in 1:nrow(topic)){
+    # if the column topic contains the currently indexed topic
+    if(i %in% topic[j,"topic"]){
+      # add count 1 in the column count
+     topic[j,"count"] <- 1 
+    } else { 
+      # else, add 0 in the column count
+      topic[j,"count"] <- 0
+    }
+  }
+  # sum up total number of publications per indexed topic
+  result[i,"count"] <- sum(topic$count)
+}
+
+# calculate percentage of publications per topic
+for(i in 1:nrow(result)){
+  result[i,"perc"] <- (result[i,"count"]/sum(result$count))*100
+}
+# order result data frame according to count in decreasing order
+result <- result[order(result$count, decreasing = T), ]
+result
+
+# plot it!
+pdf(paste0("Plot_Topics.pdf"), 
+    width = 5, height = 5)
+par(mar = c(4,4,1,1))
+# create horizontal bar plot
+bp <- barplot(
+  result$perc,
+  horiz = TRUE,
+  col ="#B8AC80",
+  border = NA,
+  xlim = c(-1.8, 51.8),
+  yaxt = "n"
+)
+
+text(
+  x = 0.71,  # slightly shift text to the right
+  y = bp,
+  labels = result$topic,
+  col = "black",
+  cex = 0.8,
+  adj = 0
+)
+box()
+
 mtext(side = 1, text = "fraction publications [%]", line = 2.5, cex = 1.2)
 dev.off()
 
@@ -457,7 +537,7 @@ par(mar = c(4,4,1,1))
 bp <- barplot(
   taxa$num_pub,
   horiz = TRUE,
-  col = "#AC8D61",
+  col = "#B8AC80",
   border = NA,
   xlim = c(-22, 822),
   yaxt = "n"
